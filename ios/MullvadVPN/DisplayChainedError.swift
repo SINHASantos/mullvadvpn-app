@@ -7,8 +7,6 @@
 //
 
 import Foundation
-import UIKit
-import NetworkExtension
 
 protocol DisplayChainedError {
     var errorChainDescription: String? { get }
