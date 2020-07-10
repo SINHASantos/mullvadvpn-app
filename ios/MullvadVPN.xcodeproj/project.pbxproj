@@ -140,6 +140,8 @@
 		58C6B36122C0EC82003C19AD /* AnyIPEndpoint+DNS64.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C6B36022C0EC82003C19AD /* AnyIPEndpoint+DNS64.swift */; };
 		58C6B36522C10596003C19AD /* AnyIPEndpoint+Wireguard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C6B36422C10596003C19AD /* AnyIPEndpoint+Wireguard.swift */; };
 		58C6B36722C106FC003C19AD /* WireguardCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C6B36622C106FC003C19AD /* WireguardCommand.swift */; };
+		58CB0EE024B86751001EF0D8 /* MullvadRestAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58CB0EDF24B86751001EF0D8 /* MullvadRestAPI.swift */; };
+		58CB0EE124B86751001EF0D8 /* MullvadRestAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58CB0EDF24B86751001EF0D8 /* MullvadRestAPI.swift */; };
 		58CC40EF24A601900019D96E /* ObserverList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58CC40EE24A601900019D96E /* ObserverList.swift */; };
 		58CC40F024A602780019D96E /* ObserverList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58CC40EE24A601900019D96E /* ObserverList.swift */; };
 		58CCA010224249A1004F3011 /* ConnectViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58CCA00F224249A1004F3011 /* ConnectViewController.swift */; };
@@ -316,6 +318,7 @@
 		58C6B36022C0EC82003C19AD /* AnyIPEndpoint+DNS64.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnyIPEndpoint+DNS64.swift"; sourceTree = "<group>"; };
 		58C6B36422C10596003C19AD /* AnyIPEndpoint+Wireguard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnyIPEndpoint+Wireguard.swift"; sourceTree = "<group>"; };
 		58C6B36622C106FC003C19AD /* WireguardCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WireguardCommand.swift; sourceTree = "<group>"; };
+		58CB0EDF24B86751001EF0D8 /* MullvadRestAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MullvadRestAPI.swift; sourceTree = "<group>"; };
 		58CC40EE24A601900019D96E /* ObserverList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObserverList.swift; sourceTree = "<group>"; };
 		58CCA00F224249A1004F3011 /* ConnectViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectViewController.swift; sourceTree = "<group>"; };
 		58CCA01122424D11004F3011 /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewController.swift; sourceTree = "<group>"; };
@@ -562,6 +565,7 @@
 				58C6B35322BB87C4003C19AD /* WireguardPrivateKey.swift */,
 				58F3C098249B978C003E76BE /* x25519.c */,
 				58F3C097249B978C003E76BE /* x25519.h */,
+				58CB0EDF24B86751001EF0D8 /* MullvadRestAPI.swift */,
 			);
 			path = MullvadVPN;
 			sourceTree = "<group>";
@@ -904,6 +908,7 @@
 				5877153023981F7B001F8237 /* WireguardKeysViewController.swift in Sources */,
 				58FAEDEF245069C700CB0F5B /* KeychainAttributes.swift in Sources */,
 				58C6B35422BB87C4003C19AD /* WireguardPrivateKey.swift in Sources */,
+				58CB0EE024B86751001EF0D8 /* MullvadRestAPI.swift in Sources */,
 				580EE20924B3224200F9D8A1 /* RetryOperation.swift in Sources */,
 				582AE3102440A6CA00E6733A /* AccountTokenInput.swift in Sources */,
 				58FAEDF7245088E100CB0F5B /* Keychain.swift in Sources */,
@@ -986,6 +991,7 @@
 			files = (
 				5860F1C423A8D25F00CEA666 /* WireguardConfiguration.swift in Sources */,
 				58F3C09D249B99DD003E76BE /* Curve25519.swift in Sources */,
+				58CB0EE124B86751001EF0D8 /* MullvadRestAPI.swift in Sources */,
 				580EE21F24B3237F00F9D8A1 /* OutputOperation.swift in Sources */,
 				580EE20224B321DB00F9D8A1 /* OperationProtocol.swift in Sources */,
 				58FAEE0224533ABB00CB0F5B /* KeychainMatchLimit.swift in Sources */,
