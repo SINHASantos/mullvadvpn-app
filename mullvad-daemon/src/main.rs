@@ -14,6 +14,8 @@ mod cli;
 #[cfg(target_os = "linux")]
 mod early_boot_firewall;
 mod exception_logging;
+#[cfg(target_os = "macos")]
+mod macos_launch_daemon;
 #[cfg(windows)]
 mod system_service;
 
@@ -24,7 +26,7 @@ const EARLY_BOOT_LOG_FILENAME: &str = "early-boot-fw.log";
 fn main() {
     let config = cli::get_config();
     let log_dir = init_daemon_logging(config).unwrap_or_else(|error| {
-        eprintln!("{}", error);
+        eprintln!("{error}");
         std::process::exit(1)
     });
 
@@ -50,6 +52,11 @@ fn init_daemon_logging(config: &cli::Config) -> Result<Option<PathBuf>, String> 
     #[cfg(target_os = "linux")]
     if config.initialize_firewall_and_exit {
         init_early_boot_logging(config);
+        return Ok(None);
+    }
+
+    #[cfg(target_os = "macos")]
+    if config.launch_daemon_status {
         return Ok(None);
     }
 
@@ -122,12 +129,20 @@ async fn run_platform(config: &cli::Config, log_dir: Option<PathBuf>) -> Result<
     if config.initialize_firewall_and_exit {
         return crate::early_boot_firewall::initialize_firewall()
             .await
-            .map_err(|err| format!("{}", err));
+            .map_err(|err| format!("{err}"));
     }
     run_standalone(log_dir).await
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(target_os = "macos")]
+async fn run_platform(config: &cli::Config, log_dir: Option<PathBuf>) -> Result<(), String> {
+    if config.launch_daemon_status {
+        std::process::exit(macos_launch_daemon::get_status() as i32);
+    }
+    run_standalone(log_dir).await
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 async fn run_platform(_config: &cli::Config, log_dir: Option<PathBuf>) -> Result<(), String> {
     run_standalone(log_dir).await
 }

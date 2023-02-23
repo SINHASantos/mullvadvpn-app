@@ -14,21 +14,17 @@ import Operations
 extension REST {
     public final class AccessTokenManager {
         private let logger = Logger(label: "REST.AccessTokenManager")
-        private let operationQueue = AsyncOperationQueue()
+        private let operationQueue = AsyncOperationQueue.makeSerial()
         private let dispatchQueue = DispatchQueue(label: "REST.AccessTokenManager.dispatchQueue")
         private let proxy: AuthenticationProxy
         private var tokens = [String: AccessTokenData]()
 
         public init(authenticationProxy: AuthenticationProxy) {
-            operationQueue.name = "REST.AccessTokenManager.operationQueue"
-            operationQueue.maxConcurrentOperationCount = 1
-            operationQueue.underlyingQueue = dispatchQueue
             proxy = authenticationProxy
         }
 
         func getAccessToken(
             accountNumber: String,
-            retryStrategy: REST.RetryStrategy,
             completionHandler: @escaping (OperationCompletion<REST.AccessTokenData, REST.Error>)
                 -> Void
         ) -> Cancellable {
@@ -42,7 +38,7 @@ extension REST {
 
                 let task = self.proxy.getAccessToken(
                     accountNumber: accountNumber,
-                    retryStrategy: retryStrategy
+                    retryStrategy: .noRetry
                 ) { completion in
                     self.dispatchQueue.async {
                         switch completion {

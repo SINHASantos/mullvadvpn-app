@@ -316,16 +316,16 @@ fi
 log_header "Preparing for packaging Mullvad VPN $PRODUCT_VERSION"
 
 if [[ "$(uname -s)" == "Darwin" || "$(uname -s)" == "Linux" ]]; then
-    mkdir -p "dist-assets/shell-completions"
+    mkdir -p "build/shell-completions"
     for sh in bash zsh fish; do
         log_info "Generating shell completion script for $sh..."
         cargo run --bin mullvad "${CARGO_ARGS[@]}" -- shell-completions "$sh" \
-            "dist-assets/shell-completions/"
+            "build/shell-completions/"
     done
 fi
 
 log_info "Updating relays.json..."
-cargo run --bin relay_list "${CARGO_ARGS[@]}" > dist-assets/relays.json
+cargo run --bin relay_list "${CARGO_ARGS[@]}" > build/relays.json
 
 
 log_header "Installing JavaScript dependencies"

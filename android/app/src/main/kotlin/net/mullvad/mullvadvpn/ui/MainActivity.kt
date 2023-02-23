@@ -22,7 +22,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -34,11 +33,17 @@ import net.mullvad.mullvadvpn.R
 import net.mullvad.mullvadvpn.compose.component.ChangelogDialog
 import net.mullvad.mullvadvpn.dataproxy.MullvadProblemReport
 import net.mullvad.mullvadvpn.di.uiModule
+import net.mullvad.mullvadvpn.lib.endpoint.getApiEndpointConfigurationExtras
 import net.mullvad.mullvadvpn.model.AccountExpiry
 import net.mullvad.mullvadvpn.model.DeviceState
-import net.mullvad.mullvadvpn.ui.fragments.DeviceRevokedFragment
-import net.mullvad.mullvadvpn.ui.serviceconnection.AccountRepository
-import net.mullvad.mullvadvpn.ui.serviceconnection.DeviceRepository
+import net.mullvad.mullvadvpn.repository.AccountRepository
+import net.mullvad.mullvadvpn.repository.DeviceRepository
+import net.mullvad.mullvadvpn.ui.fragment.ConnectFragment
+import net.mullvad.mullvadvpn.ui.fragment.DeviceRevokedFragment
+import net.mullvad.mullvadvpn.ui.fragment.LoadingFragment
+import net.mullvad.mullvadvpn.ui.fragment.LoginFragment
+import net.mullvad.mullvadvpn.ui.fragment.OutOfTimeFragment
+import net.mullvad.mullvadvpn.ui.fragment.WelcomeFragment
 import net.mullvad.mullvadvpn.ui.serviceconnection.ServiceConnectionManager
 import net.mullvad.mullvadvpn.util.SdkUtils.isNotificationPermissionGranted
 import net.mullvad.mullvadvpn.util.UNKNOWN_STATE_DEBOUNCE_DELAY_MILLISECONDS
@@ -103,7 +108,11 @@ open class MainActivity : FragmentActivity() {
     override fun onStart() {
         Log.d("mullvad", "Starting main activity")
         super.onStart()
-        serviceConnectionManager.bind(vpnPermissionRequestHandler = ::requestVpnPermission)
+
+        serviceConnectionManager.bind(
+            vpnPermissionRequestHandler = ::requestVpnPermission,
+            apiEndpointConfiguration = intent?.getApiEndpointConfigurationExtras()
+        )
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, resultData: Intent?) {
@@ -230,7 +239,7 @@ open class MainActivity : FragmentActivity() {
 
     private fun openLaunchView() {
         supportFragmentManager.beginTransaction().apply {
-            replace(R.id.main_fragment, LaunchFragment())
+            replace(R.id.main_fragment, LoadingFragment())
             commitAllowingStateLoss()
         }
     }

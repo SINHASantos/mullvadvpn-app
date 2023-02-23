@@ -345,11 +345,16 @@ impl ManagementService for ManagementServiceImpl {
             .map_err(map_settings_error)
     }
 
-    async fn set_quantum_resistant_tunnel(&self, request: Request<bool>) -> ServiceResult<()> {
-        let enable = request.into_inner();
-        log::debug!("set_quantum_resistant_tunnel({})", enable);
+    async fn set_quantum_resistant_tunnel(
+        &self,
+        request: Request<types::QuantumResistantState>,
+    ) -> ServiceResult<()> {
+        let state = mullvad_types::wireguard::QuantumResistantState::try_from(request.into_inner())
+            .map_err(map_protobuf_type_err)?;
+
+        log::debug!("set_quantum_resistant_tunnel({state:?})");
         let (tx, rx) = oneshot::channel();
-        self.send_command_to_daemon(DaemonCommand::SetQuantumResistantTunnel(tx, enable))?;
+        self.send_command_to_daemon(DaemonCommand::SetQuantumResistantTunnel(tx, state))?;
         self.wait_for_result(rx)
             .await?
             .map(Response::new)
@@ -983,7 +988,7 @@ fn map_rest_error(error: &RestError) -> Status {
         }
         RestError::TimeoutError(_elapsed) => Status::deadline_exceeded("API request timed out"),
         RestError::HyperError(_) => Status::unavailable("Cannot reach the API"),
-        error => Status::unknown(format!("REST error: {}", error)),
+        error => Status::unknown(format!("REST error: {error}")),
     }
 }
 
@@ -992,8 +997,7 @@ fn map_settings_error(error: settings::Error) -> Status {
     match error {
         settings::Error::DeleteError(..)
         | settings::Error::WriteError(..)
-        | settings::Error::ReadError(..)
-        | settings::Error::SetPermissions(..) => {
+        | settings::Error::ReadError(..) => {
             Status::new(Code::FailedPrecondition, error.to_string())
         }
         settings::Error::SerializeError(..) | settings::Error::ParseError(..) => {

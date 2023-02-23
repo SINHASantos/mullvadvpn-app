@@ -100,11 +100,6 @@ pub enum Error {
     #[error(display = "Failed to start OpenVPN")]
     StartProcessError,
 
-    /// The IP routing program was not found.
-    #[cfg(target_os = "linux")]
-    #[error(display = "The IP routing program `ip` was not found")]
-    IpRouteNotFound(#[error(source)] which::Error),
-
     /// The OpenVPN binary was not found.
     #[error(display = "No OpenVPN binary found at {}", _0)]
     OpenVpnNotFound(String),
@@ -460,6 +455,7 @@ impl<C: OpenVpnBuilder + Send + 'static> OpenVpnMonitor<C> {
         Ok(monitor)
     }
 
+    #[cfg_attr(not(windows), allow(clippy::unused_async))]
     async fn prepare_process(
         cmd: C,
         #[cfg(windows)] wintun: Arc<Box<dyn WintunContext>>,
@@ -651,7 +647,7 @@ impl<C: OpenVpnBuilder + Send + 'static> OpenVpnMonitor<C> {
         log::debug!("Writing credentials to {}", temp_file.as_ref().display());
         let mut file = fs::File::create(&temp_file)?;
         Self::set_user_pass_file_permissions(&file)?;
-        write!(file, "{}\n{}\n", username, password)?;
+        write!(file, "{username}\n{password}\n")?;
         Ok(temp_file)
     }
 
@@ -689,8 +685,6 @@ impl<C: OpenVpnBuilder + Send + 'static> OpenVpnMonitor<C> {
         if let Some(config) = Self::get_config_path(resource_dir) {
             cmd.config(config);
         }
-        #[cfg(target_os = "linux")]
-        cmd.iproute_bin(which::which("ip").map_err(Error::IpRouteNotFound)?);
         cmd.remote(params.config.endpoint)
             .user_pass(user_pass_file)
             .tunnel_options(&params.options)
@@ -1076,9 +1070,9 @@ mod event_server {
     {
         let uuid = uuid::Uuid::new_v4().to_string();
         let ipc_path = if cfg!(windows) {
-            format!("//./pipe/talpid-openvpn-{}", uuid)
+            format!("//./pipe/talpid-openvpn-{uuid}")
         } else {
-            format!("/tmp/talpid-openvpn-{}", uuid)
+            format!("/tmp/talpid-openvpn-{uuid}")
         };
 
         let endpoint = IpcEndpoint::new(ipc_path.clone());

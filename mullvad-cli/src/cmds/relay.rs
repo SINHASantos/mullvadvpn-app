@@ -350,7 +350,7 @@ impl Relay {
 
     fn validate_wireguard_key(key_str: &str) -> [u8; 32] {
         let key_bytes = base64::decode(key_str.trim()).unwrap_or_else(|e| {
-            eprintln!("Failed to decode wireguard key: {}", e);
+            eprintln!("Failed to decode wireguard key: {e}");
             std::process::exit(1);
         });
 
@@ -593,7 +593,7 @@ impl Relay {
             wireguard_constraints.entry_location = parse_entry_location_constraint(entry);
             let use_multihop = wireguard_constraints.entry_location.is_some();
             if use_multihop {
-                let use_pq_safe_psk = rpc
+                let quantum_resistant = rpc
                     .get_settings(())
                     .await?
                     .into_inner()
@@ -601,8 +601,12 @@ impl Relay {
                     .unwrap()
                     .wireguard
                     .unwrap()
-                    .use_pq_safe_psk;
-                if use_pq_safe_psk {
+                    .quantum_resistant;
+                if quantum_resistant
+                    == Some(types::QuantumResistantState {
+                        state: i32::from(types::quantum_resistant_state::State::On),
+                    })
+                {
                     return Err(Error::CommandFailed(
                         "Quantum resistant tunnels do not work when multihop is enabled",
                     ));

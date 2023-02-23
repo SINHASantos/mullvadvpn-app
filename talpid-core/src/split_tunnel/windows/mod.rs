@@ -4,11 +4,7 @@ mod service;
 mod volume_monitor;
 mod windows;
 
-use crate::{
-    tunnel::TunnelMetadata,
-    tunnel_state_machine::TunnelCommand,
-    window::{PowerManagementEvent, PowerManagementListener},
-};
+use crate::{tunnel::TunnelMetadata, tunnel_state_machine::TunnelCommand};
 use futures::channel::{mpsc, oneshot};
 use std::{
     collections::HashMap,
@@ -19,7 +15,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc as sync_mpsc, Arc, Mutex, RwLock, Weak,
+        mpsc as sync_mpsc, Arc, Mutex, MutexGuard, RwLock, Weak,
     },
     time::Duration,
 };
@@ -114,14 +110,12 @@ pub struct SplitTunnel {
     _route_change_callback: Option<CallbackHandle>,
     daemon_tx: Weak<mpsc::UnboundedSender<TunnelCommand>>,
     async_path_update_in_progress: Arc<AtomicBool>,
-    power_mgmt_handle: tokio::task::JoinHandle<()>,
     route_manager: RouteManagerHandle,
 }
 
 enum Request {
     SetPaths(Vec<OsString>),
     RegisterIps(InterfaceAddresses),
-    Restart,
     Stop,
 }
 type RequestResponseTx = sync_mpsc::Sender<Result<(), Error>>;
@@ -182,7 +176,6 @@ impl SplitTunnel {
         resource_dir: PathBuf,
         daemon_tx: Weak<mpsc::UnboundedSender<TunnelCommand>>,
         volume_update_rx: mpsc::UnboundedReceiver<()>,
-        power_mgmt_rx: PowerManagementListener,
         route_manager: RouteManagerHandle,
     ) -> Result<Self, Error> {
         let excluded_processes = Arc::new(RwLock::new(HashMap::new()));
@@ -193,9 +186,6 @@ impl SplitTunnel {
         let (event_thread, quit_event) =
             Self::spawn_event_listener(handle, excluded_processes.clone())?;
 
-        let power_mgmt_handle =
-            Self::spawn_power_management_monitor(request_tx.clone(), power_mgmt_rx);
-
         Ok(SplitTunnel {
             runtime,
             request_tx,
@@ -205,7 +195,6 @@ impl SplitTunnel {
             daemon_tx,
             async_path_update_in_progress: Arc::new(AtomicBool::new(false)),
             excluded_processes,
-            power_mgmt_handle,
             route_manager,
         })
     }
@@ -496,42 +485,6 @@ impl SplitTunnel {
                             result
                         }
                     }
-                    Request::Restart => {
-                        let monitored_paths_guard = monitored_paths.lock().unwrap();
-                        (|| {
-                            let state = handle.get_driver_state().map_err(Error::GetState)?;
-                            if state == driver::DriverState::Engaged {
-                                // Leaving the engaged state risks leaking traffic into the tunnel,
-                                // so err on the safe side.
-                                log::warn!(
-                                    "Not resetting driver state because it is currently engaged"
-                                );
-                                return Err(Error::CannotResetEngaged);
-                            }
-
-                            handle.reinitialize().map_err(Error::InitializationError)?;
-
-                            {
-                                excluded_processes.write().unwrap().clear();
-                            }
-
-                            handle
-                                .register_ips(
-                                    previous_addresses.tunnel_ipv4,
-                                    previous_addresses.tunnel_ipv6,
-                                    previous_addresses.internet_ipv4,
-                                    previous_addresses.internet_ipv6,
-                                )
-                                .map_err(Error::RegisterIps)?;
-
-                            if monitored_paths_guard.len() > 0 {
-                                handle
-                                    .set_config(&*monitored_paths_guard)
-                                    .map_err(Error::SetConfiguration)?;
-                            }
-                            Ok(())
-                        })()
-                    }
                     Request::Stop => {
                         if let Err(error) = handle.reset().map_err(Error::ResetError) {
                             let _ = response_tx.send(Err(error));
@@ -614,34 +567,6 @@ impl SplitTunnel {
             .map_err(|_| Error::RequestThreadStuck)?
     }
 
-    fn spawn_power_management_monitor(
-        request_tx: RequestTx,
-        mut power_mgmt_rx: PowerManagementListener,
-    ) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
-            while let Some(event) = power_mgmt_rx.next().await {
-                match event {
-                    PowerManagementEvent::ResumeAutomatic => {
-                        let tx = request_tx.clone();
-                        tokio::task::spawn_blocking(move || {
-                            std::thread::sleep(Duration::from_secs(1));
-                            if let Err(error) =
-                                SplitTunnel::send_request_inner(&tx, Request::Restart)
-                            {
-                                log::error!(
-                                    "{}",
-                                    error
-                                        .display_chain_with_msg("Failed to reinitialize ST module")
-                                );
-                            }
-                        });
-                    }
-                    _ => (),
-                }
-            }
-        })
-    }
-
     /// Set a list of applications to exclude from the tunnel.
     pub fn set_paths_sync<T: AsRef<OsStr>>(&self, paths: &[T]) -> Result<(), Error> {
         self.send_request(Request::SetPaths(
@@ -714,7 +639,7 @@ impl SplitTunnel {
 
         self._route_change_callback = None;
         let moved_context_mutex = context_mutex.clone();
-        let mut context = context_mutex.lock().unwrap();
+        let context = context_mutex.lock().unwrap();
         let callback = self
             .runtime
             .block_on(
@@ -728,13 +653,27 @@ impl SplitTunnel {
                     })),
             )
             .map(Some)
+            // NOTE: This cannot fail if a callback is created. If that assumption is wrong, this
+            // could deadlock if the dropped callback is invoked (see `init_context`).
             .map_err(|_| Error::RegisterRouteChangeCallback)?;
 
-        context.initialize_internet_addresses()?;
-        context.register_ips()?;
+        Self::init_context(context)?;
         self._route_change_callback = callback;
 
         Ok(())
+    }
+
+    fn init_context(
+        mut context: MutexGuard<'_, SplitTunnelDefaultRouteChangeHandlerContext>,
+    ) -> Result<(), Error> {
+        // NOTE: This should remain a separate function. Dropping the context after `callback`
+        // causes a deadlock if `split_tunnel_default_route_change_handler` is called at the same
+        // time (i.e. if a route change has occurred), since it waits on the context and
+        // `CallbackHandle::drop` also waits for `split_tunnel_default_route_change_handler`
+        // to complete.
+
+        context.initialize_internet_addresses()?;
+        context.register_ips()
     }
 
     /// Instructs the driver to stop redirecting tunnel traffic and INADDR_ANY.
@@ -753,8 +692,6 @@ impl SplitTunnel {
 
 impl Drop for SplitTunnel {
     fn drop(&mut self) {
-        self.power_mgmt_handle.abort();
-
         if let Some(_event_thread) = self.event_thread.take() {
             if let Err(error) = self.quit_event.set() {
                 log::error!(

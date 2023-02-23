@@ -1,6 +1,8 @@
+import { exec } from 'child_process';
 import { app, BrowserWindow, dialog, Menu, nativeImage, screen, Tray } from 'electron';
 import path from 'path';
 import { sprintf } from 'sprintf-js';
+import { promisify } from 'util';
 
 import { closeToExpiry, hasExpired } from '../shared/account-expiry';
 import { connectEnabled, disconnectEnabled, reconnectEnabled } from '../shared/connect-helper';
@@ -20,9 +22,10 @@ import { isMacOs11OrNewer } from './platform-version';
 import TrayIconController, { TrayIconType } from './tray-icon-controller';
 import WindowController, { WindowControllerDelegate } from './window-controller';
 
+const execAsync = promisify(exec);
+
 export interface UserInterfaceDelegate {
-  cancelPendingNotifications(): void;
-  resetTunnelStateAnnouncements(): void;
+  dismissActiveNotifications(): void;
   updateAccountData(): void;
   connectTunnel(): void;
   reconnectTunnel(): void;
@@ -69,6 +72,16 @@ export default class UserInterface implements WindowControllerDelegate {
       this.browsingFiles = false;
       return response;
     });
+
+    IpcMainEventChannel.app.handleShowLaunchDaemonSettings(async () => {
+      try {
+        await execAsync(
+          'open -W x-apple.systempreferences:com.apple.LoginItems-Settings.extension',
+        );
+      } catch (error) {
+        log.error(`Failed to open launch daemon settings: ${error}`);
+      }
+    });
   }
 
   public createTrayIconController(
@@ -77,7 +90,7 @@ export default class UserInterface implements WindowControllerDelegate {
     monochromaticIcon: boolean,
   ) {
     const iconType = this.trayIconType(tunnelState, blockWhenDisconnected);
-    this.trayIconController = new TrayIconController(this.tray, iconType, monochromaticIcon);
+    this.trayIconController = new TrayIconController(this.tray, iconType, monochromaticIcon, false);
   }
 
   public async initializeWindow(isLoggedIn: boolean, tunnelState: TunnelState) {
@@ -156,6 +169,8 @@ export default class UserInterface implements WindowControllerDelegate {
       // work since the old webContents is destroyed after the IPC wrapper has been updated with the
       // new one.
       this.windowController.webContents?.removeListener('destroyed', unsetIpcWebContents);
+      // Remove window close handler that calls `preventDefault` when closed.
+      this.windowController.window?.removeListener('close', this.windowCloseHandler);
 
       const window = this.createWindow();
       changeIpcWebContents(window.webContents);
@@ -171,9 +186,11 @@ export default class UserInterface implements WindowControllerDelegate {
   public reloadWindow = () => this.windowController.window?.reload();
   public isWindowVisible = () => this.windowController.isVisible();
   public showWindow = () => this.windowController.show();
-  public updateTrayTheme = () => this.trayIconController?.updateTheme();
-  public setUseMonochromaticTrayIcon = (value: boolean) =>
-    this.trayIconController?.setUseMonochromaticIcon(value);
+  public updateTrayTheme = () => this.trayIconController?.updateTheme() ?? Promise.resolve();
+  public setMonochromaticIcon = (value: boolean) =>
+    this.trayIconController?.setMonochromaticIcon(value);
+  public showNotificationIcon = (value: boolean) =>
+    this.trayIconController?.showNotificationIcon(value);
   public setWindowIcon = (icon: string) => this.windowController.window?.setIcon(icon);
 
   public updateTrayIcon(tunnelState: TunnelState, blockWhenDisconnected: boolean) {
@@ -305,7 +322,7 @@ export default class UserInterface implements WindowControllerDelegate {
       this.blurNavigationResetScheduler.cancel();
 
       // cancel notifications when window appears
-      this.delegate.cancelPendingNotifications();
+      this.delegate.dismissActiveNotifications();
 
       const accountData = this.delegate.getAccountData();
       if (!accountData || closeToExpiry(accountData.expiry, 4) || hasExpired(accountData.expiry)) {
@@ -315,9 +332,6 @@ export default class UserInterface implements WindowControllerDelegate {
 
     this.windowController.window?.on('blur', () => {
       IpcMainEventChannel.window.notifyFocus?.(false);
-
-      // ensure notification guard is reset
-      this.delegate.resetTunnelStateAnnouncements();
     });
 
     // Use hide instead of blur to prevent the navigation reset from happening when bluring an
@@ -411,9 +425,9 @@ export default class UserInterface implements WindowControllerDelegate {
   // On macOS, hotkeys are bound to the app menu and won't work if it's not set,
   // even though the app menu itself is not visible because the app does not appear in the dock.
   private setMacOsAppMenu() {
-    const mullvadVpnSubmenu: Electron.MenuItemConstructorOptions[] = [{ role: 'quit' }];
+    const mullvadVpnSubmenu: Electron.MenuItemConstructorOptions[] = [];
     if (process.env.NODE_ENV === 'development') {
-      mullvadVpnSubmenu.unshift({ role: 'reload' }, { role: 'forceReload' });
+      mullvadVpnSubmenu.unshift({ role: 'quit' }, { role: 'reload' }, { role: 'forceReload' });
     }
 
     const template: Electron.MenuItemConstructorOptions[] = [
@@ -498,11 +512,13 @@ export default class UserInterface implements WindowControllerDelegate {
       return;
     }
 
-    this.windowController.window?.on('close', (closeEvent: Event) => {
-      closeEvent.preventDefault();
-      this.windowController.hide();
-    });
+    this.windowController.window?.on('close', this.windowCloseHandler);
   }
+
+  private windowCloseHandler = (closeEvent: Event) => {
+    closeEvent.preventDefault();
+    this.windowController.hide();
+  };
 
   private installTrayClickHandlers() {
     switch (process.platform) {

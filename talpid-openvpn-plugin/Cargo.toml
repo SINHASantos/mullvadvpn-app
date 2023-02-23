@@ -13,11 +13,11 @@ crate-type = ["cdylib"]
 [dependencies]
 err-derive = "0.3.1"
 log = "0.4"
-env_logger = "0.8.2"
+env_logger = "0.10.0"
 parity-tokio-ipc = "0.9"
 tokio = { version = "1.8", features =  ["rt"] }
 
-openvpn-plugin = { version = "0.4", features = ["serde", "log", "auth-failed-event"] }
+openvpn-plugin = { version = "0.4.2", features = ["serde", "log", "auth-failed-event"] }
 talpid-types = { path = "../talpid-types" }
 
 tonic = "0.8"
@@ -41,6 +41,6 @@ features = [
 [package.metadata.winres]
 ProductName = "Mullvad VPN"
 CompanyName = "Mullvad VPN AB"
-LegalCopyright = "(c) 2022 Mullvad VPN AB"
+LegalCopyright = "(c) 2023 Mullvad VPN AB"
 InternalName = "talpid-openvpn-plugin"
 OriginalFilename = "talpid_openvpn_plugin.dll"

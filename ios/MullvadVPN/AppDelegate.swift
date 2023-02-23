@@ -25,11 +25,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     private var simulatorTunnelProviderHost: SimulatorTunnelProviderHost?
     #endif
 
-    private let operationQueue: AsyncOperationQueue = {
-        let operationQueue = AsyncOperationQueue()
-        operationQueue.maxConcurrentOperationCount = 1
-        return operationQueue
-    }()
+    private let operationQueue = AsyncOperationQueue.makeSerial()
 
     private(set) var tunnelStore: TunnelStore!
     private(set) var tunnelManager: TunnelManager!
@@ -51,10 +47,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        initLoggingSystem(
-            bundleIdentifier: Bundle.main.bundleIdentifier!,
-            applicationGroupIdentifier: ApplicationConfiguration.securityGroupIdentifier
-        )
+        configureLogging()
 
         logger = Logger(label: "AppDelegate")
 
@@ -305,6 +298,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     }
 
     // MARK: - Private
+
+    private func configureLogging() {
+        var loggerBuilder = LoggerBuilder()
+        let bundleIdentifier = Bundle.main.bundleIdentifier!
+
+        try? loggerBuilder.addFileOutput(
+            securityGroupIdentifier: ApplicationConfiguration.securityGroupIdentifier,
+            basename: bundleIdentifier
+        )
+
+        #if DEBUG
+        loggerBuilder.addOSLogOutput(subsystem: bundleIdentifier)
+        #endif
+
+        loggerBuilder.install()
+    }
 
     private func addApplicationNotifications(application: UIApplication) {
         let notificationCenter = NotificationCenter.default

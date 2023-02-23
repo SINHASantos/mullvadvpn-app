@@ -9,6 +9,7 @@ object Versions {
     const val kotlinx = "1.6.4"
     const val leakCanary = "2.10"
     const val mockk = "1.13.3"
+    const val mockWebserver = "4.10.0"
     const val turbine = "0.12.1"
 
     object Android {
@@ -50,7 +51,7 @@ object Versions {
         const val android = "7.3.1"
         const val androidAapt = "$android-8691043"
         const val playPublisher = "3.7.0"
-        const val dependencyCheck = "7.4.0"
+        const val dependencyCheck = "7.4.4"
         const val gradleVersions = "0.44.0"
     }
 }

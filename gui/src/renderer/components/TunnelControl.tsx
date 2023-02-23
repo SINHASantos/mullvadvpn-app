@@ -34,13 +34,13 @@ const Body = styled.div({
   display: 'flex',
   flexDirection: 'column',
   padding: `0 ${measurements.viewMargin}`,
-  marginTop: '176px',
-  flex: 1,
+  minHeight: '185px',
 });
 
 const Wrapper = styled.div({
   display: 'flex',
   flexDirection: 'column',
+  justifyContent: 'end',
   flex: 1,
 });
 
@@ -221,7 +221,7 @@ export default class TunnelControl extends React.Component<ITunnelControlProps> 
     const city = this.props.city === undefined ? '' : relayLocations.gettext(this.props.city);
     return (
       <LocationRow>
-        <StyledMarquee data-test-id="city">{city}</StyledMarquee>
+        <StyledMarquee data-testid="city">{city}</StyledMarquee>
       </LocationRow>
     );
   }
@@ -231,7 +231,7 @@ export default class TunnelControl extends React.Component<ITunnelControlProps> 
       this.props.country === undefined ? '' : relayLocations.gettext(this.props.country);
     return (
       <LocationRow>
-        <StyledMarquee data-test-id="country">{country}</StyledMarquee>
+        <StyledMarquee data-testid="country">{country}</StyledMarquee>
       </LocationRow>
     );
   }

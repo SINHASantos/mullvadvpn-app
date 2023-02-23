@@ -24,11 +24,61 @@ Line wrap the file at 100 chars.                                              Th
 
 ## [Unreleased]
 ### Added
+- Add Kyber1024 KEM algorithm into the Post-Quantum secure key exchange algorithm. This means the
+  Quantum-resistant-tunnels feature now mixes both Classic McEliece and Kyber for added protection.
+- Add notification dot to tray icon and system notification throttling.
+- Add troubleshooting information to some in-app notifications.
+- Add setting for quantum resistant tunnels to the desktop GUI.
+
+### Changed
+- Update the Post-Quantum secure key exchange gRPC client to use the stabilized
+  `PskExchangeV1` endpoint
+- Add "auto" setting for the quantum-resistant tunnel feature, and make it the default. If it was
+  previously set to off, it will now be set to auto instead. That currently means the same thing as
+  "off", but this might change in the future.
+- Update OpenVPN to 2.6.0 from 2.5.3.
+- Update OpenSSL to 1.1.1t from 1.1.1j.
+
+#### Windows
+- Remove automatic fallback to wireguard-go. This is done as a first step before fully
+  deprecating it on Windows.
+
+### Fixed
+- Fix close to expiry notification not showing unless app is opened once within the last three days
+  in the desktop app.
+- Fix desktop app not quitting properly after switching from unpinned to pinned window.
+
+#### Android
+- Fix adaptive app icon which previously had a displaced nose and some other oddities.
+
+
+## [2023.1] - 2023-02-20
+### Fixed
+#### Windows
+- Don't fail to show the mullvad-daemon help text if some of the default paths cannot be obtained.
+
+
+## [2023.1-beta2] - 2023-02-06
+### Fixed
+- Fix sorting of devices in the "too many devices"-view to properly sort on device creation time.
+
+#### macOS
+- Improved reliability of the connectivity check workaround by adding an extra captive portal check
+  domain.
+- Show "Mullvad VPN" in the Login Items UI instead of "Amagicom AB".
+- Detect whether users need to approve the launch daemon in the Login Items UI.
+
+
+## [2023.1-beta1] - 2023-01-26
+### Added
 - Add quit button to tray context menu on Linux and Window.
 - Add search bar to location list in desktop app.
 
 #### Windows
 - Remove all settings when the app is uninstalled silently.
+
+### Changed
+- Update Electron from 19.0.13 to 21.1.1.
 
 ### Fixed
 - When a country is selected, and the constraints only match relays that are not included on the
@@ -36,6 +86,7 @@ Line wrap the file at 100 chars.                                              Th
 - Fix regression where WireGuard relays were connected to over OpenVPN after a couple of failed
   attempts, when the tunnel type was set to `any`.
 - Fix missing connect timeout when connecting to a WireGuard relay over TCP.
+- Fix failure to apply firewall rules that could occur when connecting timed out.
 
 #### macOS
 - Fix fish shell completions when installed via Homebrew on Apple Silicon Macs.
@@ -43,13 +94,18 @@ Line wrap the file at 100 chars.                                              Th
 #### Linux
 - Remove last filesystem dependency of early boot blocking unit.
 - Ensure RPM package removes all application directories when uninstalled.
+- Fix architecture field for ARM RPM builds so the app installs on Fedora based distros.
 
 #### Windows
 - Ignore adapters that have no valid GUID when removing obsolete Wintun interfaces during install.
   Previously, the installer would abort.
+- Revert to using netsh for DNS config, as some Windows builds did not deal with changes correctly.
+  `TALPID_DNS_MODULE` can be used to override this.
+- Fix deadlock that could occur when the default route changed while initializing split tunneling.
 
-### Changed
-- Update Electron from 19.0.13 to 21.1.1.
+### Removed
+#### macOS
+- Remove ⌘Q shortcut.
 
 ### Security
 #### Windows

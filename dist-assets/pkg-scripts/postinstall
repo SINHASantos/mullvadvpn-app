@@ -10,6 +10,8 @@ exec 2>&1 > $LOG_DIR/postinstall.log
 echo "Running postinstall at $(date)"
 
 INSTALL_DIR=$2
+# NOTE: This path must be kept in sync with the path defined
+# in mullvad-daemon/src/macos_launch_daemon.rs
 DAEMON_PLIST_PATH="/Library/LaunchDaemons/net.mullvad.daemon.plist"
 
 DAEMON_PLIST=$(cat <<-EOM
@@ -40,6 +42,9 @@ DAEMON_PLIST=$(cat <<-EOM
                         <key>NumberOfFiles</key>
                         <integer>1024</integer>
                 </dict>
+
+                <key>AssociatedBundleIdentifiers</key>
+                <string>net.mullvad.vpn</string>
 
                 <key>StandardErrorPath</key>
                 <string>$LOG_DIR/stderr.log</string>

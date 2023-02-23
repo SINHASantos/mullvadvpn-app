@@ -12,7 +12,7 @@ use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(target_os = "windows")]
 use std::{collections::HashSet, path::PathBuf};
-use talpid_types::net::{self, openvpn, GenericTunnelOptions};
+use talpid_types::net::{openvpn, GenericTunnelOptions};
 
 mod dns;
 
@@ -44,8 +44,7 @@ impl<'de> Deserialize<'de> for SettingsVersion {
             v if v == SettingsVersion::V5 as u32 => Ok(SettingsVersion::V5),
             v if v == SettingsVersion::V6 as u32 => Ok(SettingsVersion::V6),
             v => Err(serde::de::Error::custom(format!(
-                "{} is not a valid SettingsVersion",
-                v
+                "{v} is not a valid SettingsVersion"
             ))),
         }
     }
@@ -208,17 +207,11 @@ pub struct TunnelOptions {
 
 pub use dns::{CustomDnsOptions, DefaultDnsOptions, DnsOptions, DnsState};
 
-#[cfg(target_os = "android")]
-pub use dns::AndroidDnsOptions;
-
 impl Default for TunnelOptions {
     fn default() -> Self {
         TunnelOptions {
             openvpn: openvpn::TunnelOptions::default(),
-            wireguard: wireguard::TunnelOptions {
-                options: net::wireguard::TunnelOptions::default(),
-                rotation_interval: None,
-            },
+            wireguard: wireguard::TunnelOptions::default(),
             generic: GenericTunnelOptions {
                 // Enable IPv6 be default on Android
                 enable_ipv6: cfg!(target_os = "android"),

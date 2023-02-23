@@ -33,6 +33,7 @@ import AppRouter from './components/AppRouter';
 import { Changelog } from './components/Changelog';
 import ErrorBoundary from './components/ErrorBoundary';
 import KeyboardNavigation from './components/KeyboardNavigation';
+import Lang from './components/Lang';
 import MacOsScrollbarDetection from './components/MacOsScrollbarDetection';
 import { ModalContainer } from './components/Modal';
 import { AppContext } from './context';
@@ -124,6 +125,10 @@ export default class AppRenderer {
       this.setIsPerformingPostUpgrade(isPerformingPostUpgrade);
     });
 
+    IpcRendererEventChannel.daemon.listenDaemonAllowed((daemonAllowed) => {
+      this.reduxActions.userInterface.setDaemonAllowed(daemonAllowed);
+    });
+
     IpcRendererEventChannel.account.listen((newAccountData?: IAccountData) => {
       this.setAccountExpiry(newAccountData?.expiry);
     });
@@ -203,6 +208,10 @@ export default class AppRenderer {
     this.setSettings(initialState.settings);
     this.setIsPerformingPostUpgrade(initialState.isPerformingPostUpgrade);
 
+    if (initialState.daemonAllowed !== undefined) {
+      this.reduxActions.userInterface.setDaemonAllowed(initialState.daemonAllowed);
+    }
+
     if (initialState.deviceState) {
       const deviceState = initialState.deviceState;
       this.handleDeviceEvent(
@@ -264,17 +273,19 @@ export default class AppRenderer {
     return (
       <AppContext.Provider value={{ app: this }}>
         <Provider store={this.reduxStore}>
-          <Router history={this.history.asHistory}>
-            <ErrorBoundary>
-              <ModalContainer>
-                <KeyboardNavigation>
-                  <AppRouter />
-                  <Changelog />
-                </KeyboardNavigation>
-                {window.env.platform === 'darwin' && <MacOsScrollbarDetection />}
-              </ModalContainer>
-            </ErrorBoundary>
-          </Router>
+          <Lang>
+            <Router history={this.history.asHistory}>
+              <ErrorBoundary>
+                <ModalContainer>
+                  <KeyboardNavigation>
+                    <AppRouter />
+                    <Changelog />
+                  </KeyboardNavigation>
+                  {window.env.platform === 'darwin' && <MacOsScrollbarDetection />}
+                </ModalContainer>
+              </ErrorBoundary>
+            </Router>
+          </Lang>
         </Provider>
       </AppContext.Provider>
     );
@@ -453,6 +464,12 @@ export default class AppRenderer {
     await IpcRendererEventChannel.settings.setWireguardMtu(mtu);
   };
 
+  public setWireguardQuantumResistant = async (quantumResistant?: boolean) => {
+    const actions = this.reduxActions;
+    actions.settings.updateWireguardQuantumResistant(quantumResistant);
+    await IpcRendererEventChannel.settings.setWireguardQuantumResistant(quantumResistant);
+  };
+
   public setAutoStart = (autoStart: boolean): Promise<void> => {
     this.storeAutoStart(autoStart);
 
@@ -465,6 +482,10 @@ export default class AppRenderer {
 
   public removeSplitTunnelingApplication(application: IWindowsApplication) {
     void IpcRendererEventChannel.windowsSplitTunneling.removeApplication(application);
+  }
+
+  public async showLaunchDaemonSettings() {
+    await IpcRendererEventChannel.app.showLaunchDaemonSettings();
   }
 
   public async sendProblemReport(
@@ -614,6 +635,7 @@ export default class AppRenderer {
   private onDaemonConnected() {
     this.connectedToDaemon = true;
     this.reduxActions.userInterface.setConnectedToDaemon(true);
+    this.reduxActions.userInterface.setDaemonAllowed(true);
     this.resetNavigation();
   }
 
@@ -730,6 +752,9 @@ export default class AppRenderer {
     reduxSettings.updateShowBetaReleases(newSettings.showBetaReleases);
     reduxSettings.updateOpenVpnMssfix(newSettings.tunnelOptions.openvpn.mssfix);
     reduxSettings.updateWireguardMtu(newSettings.tunnelOptions.wireguard.mtu);
+    reduxSettings.updateWireguardQuantumResistant(
+      newSettings.tunnelOptions.wireguard.quantumResistant,
+    );
     reduxSettings.updateBridgeState(newSettings.bridgeState);
     reduxSettings.updateDnsOptions(newSettings.tunnelOptions.dns);
     reduxSettings.updateSplitTunnelingState(newSettings.splitTunnel.enableExclusions);
@@ -780,6 +805,9 @@ export default class AppRenderer {
 
         switch (this.loginState) {
           case 'none':
+            reduxAccount.loggedIn(accountToken, device);
+            this.resetNavigation();
+            break;
           case 'logging in':
             reduxAccount.loggedIn(accountToken, device);
 
@@ -792,10 +820,6 @@ export default class AppRenderer {
           case 'creating account':
             reduxAccount.accountCreated(accountToken, device, new Date().toISOString());
             break;
-        }
-
-        if (this.loginState !== 'logging in' && this.loginState !== 'creating account') {
-          this.resetNavigation();
         }
         break;
       }

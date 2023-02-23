@@ -3,7 +3,7 @@ use futures::TryFutureExt;
 use mullvad_types::{
     relay_constraints::{BridgeSettings, BridgeState, ObfuscationSettings, RelaySettingsUpdate},
     settings::{DnsOptions, Settings},
-    wireguard::RotationInterval,
+    wireguard::{QuantumResistantState, RotationInterval},
 };
 use rand::Rng;
 #[cfg(target_os = "windows")]
@@ -38,9 +38,6 @@ pub enum Error {
 
     #[error(display = "Unable to write settings to {}", _0)]
     WriteError(String, #[error(source)] io::Error),
-
-    #[error(display = "Unable to set settings file permissions")]
-    SetPermissions(#[error(source)] io::Error),
 }
 
 #[derive(Debug)]
@@ -128,12 +125,7 @@ impl SettingsPersister {
         log::debug!("Writing settings to {}", self.path.display());
 
         let buffer = serde_json::to_string_pretty(&self.settings).map_err(Error::SerializeError)?;
-        let mut options = fs::OpenOptions::new();
-        #[cfg(unix)]
-        {
-            options.mode(0o600);
-        }
-        let mut file = options
+        let mut file = fs::OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
@@ -143,24 +135,6 @@ impl SettingsPersister {
         file.write_all(&buffer.into_bytes())
             .await
             .map_err(|e| Error::WriteError(self.path.display().to_string(), e))?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut permissions = file
-                .metadata()
-                .await
-                .map_err(Error::SetPermissions)?
-                .permissions();
-            if permissions.mode() & 0o777 != 0o600 {
-                log::debug!("Updating file permissions");
-                permissions.set_mode(0o600);
-                file.set_permissions(permissions)
-                    .await
-                    .map_err(Error::SetPermissions)?;
-            }
-        }
-
         file.sync_all()
             .await
             .map_err(|e| Error::WriteError(self.path.display().to_string(), e))?;
@@ -249,16 +223,11 @@ impl SettingsPersister {
 
     pub async fn set_quantum_resistant_tunnel(
         &mut self,
-        use_pq_safe_psk: bool,
+        quantum_resistant: QuantumResistantState,
     ) -> Result<bool, Error> {
         let should_save = Self::update_field(
-            &mut self
-                .settings
-                .tunnel_options
-                .wireguard
-                .options
-                .use_pq_safe_psk,
-            use_pq_safe_psk,
+            &mut self.settings.tunnel_options.wireguard.quantum_resistant,
+            quantum_resistant,
         );
         self.update(should_save).await
     }
@@ -270,8 +239,7 @@ impl SettingsPersister {
     }
 
     pub async fn set_wireguard_mtu(&mut self, mtu: Option<u16>) -> Result<bool, Error> {
-        let should_save =
-            Self::update_field(&mut self.settings.tunnel_options.wireguard.options.mtu, mtu);
+        let should_save = Self::update_field(&mut self.settings.tunnel_options.wireguard.mtu, mtu);
         self.update(should_save).await
     }
 
@@ -327,12 +295,7 @@ impl SettingsPersister {
     #[cfg(windows)]
     pub async fn set_use_wireguard_nt(&mut self, state: bool) -> Result<bool, Error> {
         let should_save = Self::update_field(
-            &mut self
-                .settings
-                .tunnel_options
-                .wireguard
-                .options
-                .use_wireguard_nt,
+            &mut self.settings.tunnel_options.wireguard.use_wireguard_nt,
             state,
         );
         self.update(should_save).await

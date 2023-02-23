@@ -274,7 +274,7 @@ impl RequestServiceHandle {
     }
 
     /// Forcibly update the connection mode.
-    pub async fn next_api_endpoint(&self) -> Result<()> {
+    pub fn next_api_endpoint(&self) -> Result<()> {
         self.tx
             .unbounded_send(RequestCommand::NextApiConfig)
             .map_err(|_| Error::SendError)
@@ -328,7 +328,7 @@ impl RestRequest {
     pub fn set_auth(&mut self, auth: Option<String>) -> Result<()> {
         let header = match auth {
             Some(auth) => Some(
-                HeaderValue::from_str(&format!("Bearer {}", auth))
+                HeaderValue::from_str(&format!("Bearer {auth}"))
                     .map_err(Error::InvalidHeaderError)?,
             ),
             None => None,

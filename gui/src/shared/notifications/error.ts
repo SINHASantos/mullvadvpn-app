@@ -11,8 +11,12 @@ import {
 import { messages } from '../gettext';
 import {
   InAppNotification,
+  InAppNotificationAction,
   InAppNotificationProvider,
+  SystemNotification,
+  SystemNotificationCategory,
   SystemNotificationProvider,
+  SystemNotificationSeverityType,
 } from './notification';
 
 interface ErrorNotificationContext {
@@ -26,7 +30,7 @@ export class ErrorNotificationProvider
 
   public mayDisplay = () => this.context.tunnelState.state === 'error';
 
-  public getSystemNotification() {
+  public getSystemNotification(): SystemNotification | undefined {
     if (this.context.tunnelState.state === 'error') {
       let message = getMessage(this.context.tunnelState.details);
       if (!this.context.tunnelState.details.blockingError && this.context.hasExcludedApps) {
@@ -41,7 +45,11 @@ export class ErrorNotificationProvider
 
       return {
         message,
-        critical: !!this.context.tunnelState.details.blockingError,
+        severity:
+          this.context.tunnelState.details.blockingError === undefined
+            ? SystemNotificationSeverityType.low
+            : SystemNotificationSeverityType.high,
+        category: SystemNotificationCategory.tunnelState,
       };
     } else {
       return undefined;
@@ -70,6 +78,7 @@ export class ErrorNotificationProvider
           ? messages.pgettext('in-app-notifications', 'NETWORK TRAFFIC MIGHT BE LEAKING')
           : messages.pgettext('in-app-notifications', 'BLOCKING INTERNET'),
         subtitle,
+        action: getActions(this.context.tunnelState.details) ?? undefined,
       };
     } else {
       return undefined;
@@ -84,19 +93,19 @@ function getMessage(errorState: ErrorState): string {
         case 'win32':
           return messages.pgettext(
             'notifications',
-            'Unable to block all network traffic. Try disabling any third-party antivirus or security software or contact support.',
+            'Unable to block all network traffic. Try temporarily disabling any third-party antivirus or security software or send a problem report.',
           );
         case 'linux':
           return messages.pgettext(
             'notifications',
-            'Unable to block all network traffic. Try updating your kernel or contact support.',
+            'Unable to block all network traffic. Try updating your kernel or send a problem report.',
           );
       }
     }
 
     return messages.pgettext(
       'notifications',
-      'Unable to block all network traffic. Please troubleshoot or contact support.',
+      'Unable to block all network traffic. Please troubleshoot or send a problem report.',
     );
   } else {
     switch (errorState.cause) {
@@ -121,7 +130,7 @@ function getMessage(errorState: ErrorState): string {
           default:
             return messages.pgettext(
               'auth-failure',
-              'Unable to authenticate account. Please contact support.',
+              'Unable to authenticate account. Please send a problem report.',
             );
         }
       case ErrorStateCause.ipv6Unavailable:
@@ -134,7 +143,7 @@ function getMessage(errorState: ErrorState): string {
           case 'win32':
             return messages.pgettext(
               'notifications',
-              'Unable to apply firewall rules. Try disabling any third-party antivirus or security software.',
+              'Unable to apply firewall rules. Try temporarily disabling any third-party antivirus or security software.',
             );
           case 'linux':
             return messages.pgettext(
@@ -147,12 +156,12 @@ function getMessage(errorState: ErrorState): string {
       case ErrorStateCause.setDnsError:
         return messages.pgettext(
           'notifications',
-          'Unable to set system DNS server. Please contact support.',
+          'Unable to set system DNS server. Please send a problem report.',
         );
       case ErrorStateCause.startTunnelError:
         return messages.pgettext(
           'notifications',
-          'Unable to start tunnel connection. Please contact support.',
+          'Unable to start tunnel connection. Please send a problem report.',
         );
       case ErrorStateCause.tunnelParameterError:
         return getTunnelParameterMessage(errorState.parameterError);
@@ -164,7 +173,7 @@ function getMessage(errorState: ErrorState): string {
       case ErrorStateCause.splitTunnelError:
         return messages.pgettext(
           'notifications',
-          'Unable to communicate with Mullvad kernel driver. Try reconnecting or contact support.',
+          'Unable to communicate with Mullvad kernel driver. Try reconnecting or send a problem report.',
         );
     }
   }
@@ -177,7 +186,7 @@ function getTunnelParameterMessage(error: TunnelParameterError): string {
     case TunnelParameterError.noMatchingRelay:
       return messages.pgettext(
         'notifications',
-        'No servers in your selected location match your settings.',
+        'No servers match your settings, try changing server or other settings.',
       );
     case TunnelParameterError.noWireguardKey:
       return sprintf(
@@ -194,5 +203,71 @@ function getTunnelParameterMessage(error: TunnelParameterError): string {
         'notifications',
         'Unable to resolve host of custom tunnel. Try changing your settings.',
       );
+  }
+}
+
+function getActions(errorState: ErrorState): InAppNotificationAction | void {
+  const platform = process.platform ?? window.env.platform;
+
+  if (errorState.cause === ErrorStateCause.setFirewallPolicyError && platform === 'linux') {
+    return {
+      type: 'troubleshoot-dialog',
+      troubleshoot: {
+        details: messages.pgettext(
+          'troubleshoot',
+          'This can happen because the kernel is old, or if you have removed a kernel.',
+        ),
+        steps: [
+          messages.pgettext('troubleshoot', 'Update your kernel.'),
+          messages.pgettext('troubleshoot', 'Make sure you have NF tables support.'),
+        ],
+      },
+    };
+  } else if (errorState.cause === ErrorStateCause.setDnsError) {
+    const troubleshootSteps = [];
+    if (platform === 'darwin') {
+      troubleshootSteps.push(
+        messages.pgettext(
+          'troubleshoot',
+          'Try to turn Wi-Fi Calling off in the FaceTime app settings and restart the Mac.',
+        ),
+        messages.pgettext(
+          'troubleshoot',
+          'Uninstall or disable other DNS, networking and ads/website blocking apps.',
+        ),
+      );
+    } else if (platform === 'win32') {
+      troubleshootSteps.push(
+        messages.pgettext(
+          'troubleshoot',
+          'Uninstall or disable other DNS, networking and ads/website blocking apps.',
+        ),
+      );
+    }
+
+    return {
+      type: 'troubleshoot-dialog',
+      troubleshoot: {
+        details: messages.pgettext(
+          'troubleshoot',
+          'This error can happen when something other than Mullvad is actively updating the DNS.',
+        ),
+        steps: troubleshootSteps,
+      },
+    };
+  } else if (errorState.cause === ErrorStateCause.splitTunnelError) {
+    return {
+      type: 'troubleshoot-dialog',
+      troubleshoot: {
+        details: messages.pgettext(
+          'troubleshoot',
+          'Unable to communicate with Mullvad kernel driver.',
+        ),
+        steps: [
+          messages.pgettext('troubleshoot', 'Try reconnecting.'),
+          messages.pgettext('troubleshoot', 'Try restarting your device.'),
+        ],
+      },
+    };
   }
 }

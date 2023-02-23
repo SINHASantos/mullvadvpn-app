@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { app, nativeTheme, session, shell, systemPreferences } from 'electron';
 import fs from 'fs';
 import * as path from 'path';
@@ -20,7 +20,10 @@ import { ITranslations, MacOsScrollbarVisibility } from '../shared/ipc-schema';
 import { IChangelog, IHistoryObject } from '../shared/ipc-types';
 import log, { ConsoleOutput, Logger } from '../shared/logging';
 import { LogLevel } from '../shared/logging-types';
-import { SystemNotification } from '../shared/notifications/notification';
+import {
+  SystemNotification,
+  SystemNotificationCategory,
+} from '../shared/notifications/notification';
 import Account, { AccountDelegate, LocaleProvider } from './account';
 import { getOpenAtLogin } from './autostart';
 import { readChangelog } from './changelog';
@@ -45,6 +48,7 @@ import NotificationController, {
   NotificationSender,
 } from './notification-controller';
 import * as problemReport from './problem-report';
+import { resolveBin } from './proc';
 import ReconnectionBackoff from './reconnection-backoff';
 import Settings, { SettingsDelegate } from './settings';
 import TunnelStateHandler, {
@@ -88,6 +92,7 @@ class ApplicationMain
   private reconnectBackoff = new ReconnectionBackoff();
   private beforeFirstDaemonConnection = true;
   private isPerformingPostUpgrade = false;
+  private daemonAllowed?: boolean;
   private quitInitiated = false;
 
   private tunnelStateExpectation?: Expectation;
@@ -209,14 +214,6 @@ class ApplicationMain
 
   public isLoggedIn = () => this.account.isLoggedIn();
 
-  public notify = (notification: SystemNotification) => {
-    this.notificationController.notify(
-      notification,
-      this.userInterface?.isWindowVisible() ?? false,
-      this.settings.gui.enableSystemNotifications,
-    );
-  };
-
   public disconnectAndQuit = async () => {
     if (this.daemonRpc.isConnected) {
       try {
@@ -314,6 +311,7 @@ class ApplicationMain
     log.info('Quit initiated');
 
     this.userInterface?.dispose();
+    this.notificationController.dispose();
 
     // Unsubscribe the event handler
     try {
@@ -384,6 +382,8 @@ class ApplicationMain
       systemPreferences.subscribeNotification('AppleShowScrollBarsSettingChanged', async () => {
         await this.updateMacOsScrollbarVisibility();
       });
+
+      await this.checkMacOsLaunchDaemon();
     }
 
     this.userInterface = new UserInterface(
@@ -591,6 +591,9 @@ class ApplicationMain
     } else {
       log.info('Disconnected from the daemon');
     }
+    if (process.platform === 'darwin') {
+      void this.checkMacOsLaunchDaemon();
+    }
   };
 
   private connectToDaemon() {
@@ -677,6 +680,7 @@ class ApplicationMain
       tunnelState: this.tunnelState.tunnelState,
       settings: this.settings.all,
       isPerformingPostUpgrade: this.isPerformingPostUpgrade,
+      daemonAllowed: this.daemonAllowed,
       deviceState: this.account.deviceState,
       relayList: this.relayList,
       currentVersion: this.version.currentVersion,
@@ -875,6 +879,31 @@ class ApplicationMain
     return this.settings.gui.unpinnedWindow && !this.settings.gui.startMinimized;
   }
 
+  private checkMacOsLaunchDaemon(): Promise<void> {
+    const daemonBin = resolveBin('mullvad-daemon');
+    const args = ['--launch-daemon-status'];
+    return new Promise((resolve, _reject) => {
+      execFile(daemonBin, args, { windowsHide: true }, (error, stdout, stderr) => {
+        if (error) {
+          if (error.code === 2) {
+            IpcMainEventChannel.daemon.notifyDaemonAllowed?.(false);
+            this.daemonAllowed = false;
+          } else {
+            log.error(
+              `Error while checking launch daemon authorization status.
+                Stdout: ${stdout.toString()}
+                Stderr: ${stderr.toString()}`,
+            );
+          }
+        } else {
+          IpcMainEventChannel.daemon.notifyDaemonAllowed?.(true);
+          this.daemonAllowed = true;
+        }
+        resolve();
+      });
+    });
+  }
+
   private async updateMacOsScrollbarVisibility(): Promise<void> {
     const command =
       'defaults read kCFPreferencesAnyApplication AppleShowScrollBars || echo Automatic';
@@ -912,12 +941,22 @@ class ApplicationMain
       return shell.openExternal(url);
     }
   };
+  public showNotificationIcon = (value: boolean) => this.userInterface?.showNotificationIcon(value);
+
+  // NotificationSender
+  public notify = (notification: SystemNotification) => {
+    this.notificationController.notify(
+      notification,
+      this.userInterface?.isWindowVisible() ?? false,
+      this.settings.gui.enableSystemNotifications,
+    );
+  };
+  public closeNotificationsInCategory = (category: SystemNotificationCategory) =>
+    this.notificationController.closeNotificationsInCategory(category);
 
   // UserInterfaceDelegate
-  public cancelPendingNotifications = () =>
-    this.notificationController.cancelPendingNotifications();
-  public resetTunnelStateAnnouncements = () =>
-    this.notificationController.resetTunnelStateAnnouncements();
+  public dismissActiveNotifications = () =>
+    this.notificationController.dismissActiveNotifications();
   public isUnpinnedWindow = () => this.settings.gui.unpinnedWindow;
   public updateAccountData = () => this.account.updateAccountData();
   public getAccountData = () => this.account.accountData;
@@ -947,7 +986,7 @@ class ApplicationMain
 
   // SettingsDelegate
   public handleMonochromaticIconChange = (value: boolean) =>
-    this.userInterface?.setUseMonochromaticTrayIcon(value) ?? Promise.resolve();
+    this.userInterface?.setMonochromaticIcon(value) ?? Promise.resolve();
   public handleUnpinnedWindowChange = () =>
     void this.userInterface?.recreateWindow(
       this.account.isLoggedIn(),

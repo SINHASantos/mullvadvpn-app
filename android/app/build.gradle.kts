@@ -42,6 +42,12 @@ android {
             name = "ALWAYS_SHOW_CHANGELOG",
             value = alwaysShowChangelog
         )
+
+        lint {
+            baseline = file("lint-baseline.xml")
+            abortOnError = true
+            warningsAsErrors = true
+        }
     }
 
     if (keystorePropertiesFile.exists()) {
@@ -56,21 +62,32 @@ android {
 
         buildTypes {
             getByName("release") {
-                isMinifyEnabled = false
                 signingConfig = signingConfigs.getByName("release")
             }
         }
     }
 
     buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+
         create("fdroid") {
             initWith(buildTypes.getByName("release"))
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = null
+            matchingFallbacks += "release"
         }
 
         create("leakCanary") {
             initWith(buildTypes.getByName("debug"))
+            matchingFallbacks += "debug"
         }
     }
 
@@ -83,19 +100,6 @@ android {
 
             assets.srcDirs(extraAssetsDirectory, changelogDir)
             jniLibs.srcDirs(extraJniDirectory)
-            java.srcDirs("src/main/kotlin/")
-        }
-
-        getByName("debug") {
-            java.srcDirs("src/debug/kotlin/")
-        }
-
-        getByName("test") {
-            java.srcDirs("src/test/kotlin/")
-        }
-
-        getByName("androidTest") {
-            java.srcDirs("src/androidTest/kotlin/")
         }
     }
 
@@ -164,7 +168,7 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
 }
 
 tasks.register("copyExtraAssets", Copy::class) {
-    from("$repoRootPath/dist-assets")
+    from("$repoRootPath/build")
     include("relays.json")
     into(extraAssetsDirectory)
 }
@@ -189,6 +193,8 @@ play {
 }
 
 dependencies {
+    implementation(project(Dependencies.Mullvad.endpointLib))
+
     implementation(Dependencies.androidMaterial)
     implementation(Dependencies.commonsValidator)
     implementation(Dependencies.AndroidX.appcompat)
